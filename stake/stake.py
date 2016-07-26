@@ -20,6 +20,7 @@ Usage:
 
 @author Percy Liang
 '''
+from __future__ import print_function
 
 import argparse
 import json
@@ -35,7 +36,7 @@ import signal
 import time
 
 def log(s):
-    print >>sys.stderr, '[stake %s] %s' % (time.strftime('%Y-%m-%d %H:%M:%S'), s)
+    print('[stake %s] %s' % (time.strftime('%Y-%m-%d %H:%M:%S'), s), file=sys.stderr)
 
 def parse_size(s):
     """
@@ -91,7 +92,7 @@ def get_gpu_info():
     Return JSON:
     {
         <gpu_num>: {
-            'free_gpu_mem': ...,
+            'used_gpu_mem': ...,
             'total_gpu_mem': ...,
             'processes': [{'pid': ..., 'command': ..., 'gpu_mem': ...}, ...]
         }
@@ -101,7 +102,7 @@ def get_gpu_info():
         assert s.endswith('MiB')
         return int(s[:-3]) * 1024 * 1024
 
-    lines = subprocess.check_output('nvidia-smi').split('\n')
+    lines = subprocess.check_output('nvidia-smi', universal_newlines=True).split('\n')
     curr_gpu_num = None
     in_processes_section = False
     info = {}
@@ -118,18 +119,36 @@ def get_gpu_info():
                 info[curr_gpu_num] = {}
                 continue
             # Find match
-            m = re.search(r'(\d+MiB) / (\d+MiB)', line)
+            m = re.search(r'(\d+MiB)\s+/\s+(\d+MiB)', line)
             if m:
-                info[curr_gpu_num]['free_gpu_mem'] = convert_to_bytes(m.group(1))
+                info[curr_gpu_num]['used_gpu_mem'] = convert_to_bytes(m.group(1))
                 info[curr_gpu_num]['total_gpu_mem'] = convert_to_bytes(m.group(2))
                 continue
         else:
             if re.search(r'^\|\s+(\d+)', line):
-                args = re.split('\s+', line)
-                gpu_num = int(args[1])
-                pid = int(args[2])
-                command = ' '.join(args[4:-2])
-                mem = convert_to_bytes(args[-2])
+                args = re.split(r'\s+', line)
+                # Handle the case that sometimes nvidia-smi does not
+                # work and can report a line that looks like
+                # |    0                  Not Supported
+                if "Not Supported" in line:
+                    raise NotImplementedError("""Unfortunately, `nvidia-smi` does not properly
+                            support the graphics card on this machine.
+                            stake.py will not be able to track the
+                            processes using the GPU for stats. Please
+                            try using another machine.""")
+                    # TODO(chaganty): Perhaps stake.py can 'grab' the
+                    # entire GPU.
+                    # gpu_num = int(args[1])
+                    # pid = -1
+                    # command = ""
+                    # Approximate memory usage as being the sum total of
+                    # all the memory used on the GPU.
+                    mem = info[gpu_num]['used_gpu_mem']
+                else:
+                    gpu_num = int(args[1])
+                    pid = int(args[2])
+                    command = ' '.join(args[4:-2])
+                    mem = convert_to_bytes(args[-2])
                 info[gpu_num].setdefault('processes', []).append({'pid': pid, 'command': command, 'gpu_mem': mem})
 
         #print line
@@ -144,7 +163,7 @@ def read_stake_info():
 
 def write_stake_info(stake_info):
     with open(stake_path, 'w') as f:
-        print >>f, json.dumps(stake_info)
+        print(json.dumps(stake_info),file=f)
 
 def claim_exists(claim):
     pid = claim.get('pid')
@@ -286,7 +305,7 @@ def run_command(claim_id, stake_info):
         }
         if args.stats_file:
             with open(args.stats_file, 'w') as f:
-                print >>f, json.dumps(stats)
+                print(json.dumps(stats),file=f)
 
     #while p.returncode is None:
     first = True
@@ -355,7 +374,7 @@ def do_info():
         table.append([
             gpu_num,
             size_str(claimed_gpu_mem),
-            size_str(info['free_gpu_mem']),
+            size_str(info['used_gpu_mem']),
             size_str(info['total_gpu_mem']),
             size_str(available_gpu_mem(stake_info, gpu_num))
         ])
@@ -381,7 +400,7 @@ def do_info():
             table.append([gpu_num, '-', size_str(process['gpu_mem']), 'RUN %s (pid %s)' % (process['command'], process['pid'])])
 
     for row in table:
-        print '\t'.join(map(str, row))
+        print('\t'.join(map(str, row)))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
