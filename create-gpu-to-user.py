@@ -73,5 +73,4 @@ for machine_name in gpu_to_user:
   print "  "+machine_name+":"
   for gpu in gpu_to_user[machine_name]:
     print "  - - "+gpu
-    for user in gpu_to_user[machine_name][gpu]:
-      print "    - "+(",".join(gpu_to_user[machine_name][gpu]))
+    print "    - "+(",".join(gpu_to_user[machine_name][gpu]))
