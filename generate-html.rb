@@ -258,6 +258,18 @@ gpu_user_counts = gpu_users_flat.each_with_object(Hash.new(0)) do |name, h|
     h[name] += 1
 end
 
+# generate a list of free-ish gpus (mem <= 10% and util <= 10%)
+free_gpus = []
+info.each do |name, m|
+    if m.gpus.length > 0
+        m.gpus.each_with_index do |gpu, i|
+            if (gpu[:memused].to_f <= gpu[:memtot].to_f / 10) and (gpu[:utilization].to_f <= 10)
+                free_gpus.push "#{name.to_aref}:gpu#{i}"
+            end
+        end
+    end
+end
+
 puts <<EOS
 <!--#include virtual="/header.html" -->
 
@@ -345,6 +357,8 @@ puts "<p><b>Special machines</b> <i>(not for heavy compute!):</i> #{"jamie".to_a
 puts "<p><b>Impressive:</b> " + impressive.map { |u| "#{u} #{lusers[u].nil? ? "": lusers[u][:note].nil? ? "" : "<i>[#{lusers[u][:note]}]</i>"}#{lusers[u].nil? ? "": " (#{'%.1f' % lusers[u][:total_cpu]}% cpu)" }" }.listify + ".</p>" unless impressive.empty?
 
 puts "<p><b>GPUs used:</b> " + gpu_user_counts.sort_by {|k, v| -v}.map {|u, n| "#{u} #{lusers[u].nil? ? "": lusers[u][:header_note].nil? ? "" : "<i>[#{lusers[u][:header_note]}]</i>"}: #{n}"}.listify + ".</p>"
+
+puts "<p><b>Free-ish GPUs</b> (mem, util &lt;= 10%, " + free_gpus.length.to_s + " in total): " + free_gpus.listify + ".</p>"
 
 # CDM Nov 2008: This script runs on juice as users pdm. This bit needs juicy mounted
 # if ! impressive.empty?
