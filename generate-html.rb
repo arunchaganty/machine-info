@@ -260,11 +260,15 @@ end
 
 # generate a list of free-ish gpus (mem <= 10% and util <= 10%)
 free_gpus = []
+free_gpus_claimed = 0
 info.each do |name, m|
     if m.gpus.length > 0
         m.gpus.each_with_index do |gpu, i|
             if (gpu[:memused].to_f <= gpu[:memtot].to_f / 10) and (gpu[:utilization].to_f <= 10)
-                free_gpus.push "#{name.to_aref}:gpu#{i}"
+                free_gpus.push "#{name.to_aref.wrap_if('del', claims.member?(name))}:gpu#{i}"
+                if claims.member?(name)
+                    free_gpus_claimed += 1
+                end
             end
         end
     end
@@ -358,7 +362,7 @@ puts "<p><b>Impressive:</b> " + impressive.map { |u| "#{u} #{lusers[u].nil? ? ""
 
 puts "<p><b>GPUs used:</b> " + gpu_user_counts.sort_by {|k, v| -v}.map {|u, n| "#{u} #{lusers[u].nil? ? "": lusers[u][:header_note].nil? ? "" : "<i>[#{lusers[u][:header_note]}]</i>"}: #{n}"}.listify + ".</p>"
 
-puts "<p><b>Free-ish GPUs</b> (mem, util &lt;= 10%, " + free_gpus.length.to_s + " in total): " + free_gpus.listify + ".</p>"
+puts "<p><b>Free-ish GPUs</b> (mem, util &lt;= 10%, " + free_gpus.length.to_s + " in total, " + free_gpus_claimed.to_s + " claimed): " + free_gpus.listify + ".</p>"
 
 # CDM Nov 2008: This script runs on juice as users pdm. This bit needs juicy mounted
 # if ! impressive.empty?
