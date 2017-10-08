@@ -19,7 +19,7 @@ NOTE_MAX_AGE = 5 * 24 * 3600 # (seconds) ignore files older than this
 
 ## known lusers. even if these guys aren't running anything we will
 ## poll their claims.  this list needs updated when new people come.
-LUSERS = %w(jrfinkel grenager wtm manning jurafsky natec mgalley cerd mcdm acvogel
+LUSERS = %w(dorarad jrfinkel grenager wtm manning jurafsky natec mgalley cerd mcdm acvogel
 	    hyhieu meric pengqi sbowman cases lmthang bdlijiwei vzhong codalab wmonroe4 jebolton kevclark danqi)
 
 ## total cpu percentage usage threshold for whether a luser is
@@ -35,7 +35,14 @@ raise "expecting a sequence of machine names as arguments" if ARGV.empty?
 ## get machine info
 machines = ARGV.flat_map { |names| names.split.map { |name|
     SysInfo.new name, YAML.load_file(File.join(YAML_DIR, "#{name}.yaml"))
-}}.sort_by { |m| m.name }
+}}.sort_by do |m|
+  if match = m.name.match(/^([A-Za-z]+)([0-9]+)$/)
+    one, two = match.captures
+    one + two.to_i.to_s.rjust(4, "0")
+  else
+    m.name
+  end
+end
 
 ## get user notes and claims
 lusers = {}
