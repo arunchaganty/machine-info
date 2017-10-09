@@ -119,7 +119,7 @@ EOS
     body = nontrivial_lusers.sort_by { |name, h| h[:cpu] }.map do |name, h|
       #cmd = h[:cmd].select { |what, cpu, mem| cpu > SysInfo::TRIVIAL_CPU_THRESH || mem > SysInfo::TRIVIAL_MEM_THRESH }.map { |what, cpu, mem| what }
       # skip PBS MOM jobs
-      selected = h[:cmd].select { |what, cpu, mem, extra| (cpu > 0 || mem > 0) and not
+      selected = h[:cmd].select { |what, cpu, mem, extra| (cpu > SysInfo::TRIVIAL_CPU_THRESH || mem > 0) and not
         (extra[:full_cmd] =~ /pbs_mom/ or extra[:full_cmd] =~ /mom_priv/ or what =~ /pbs_mom/ or what =~ /mom_priv/) }
 
       # TODO this could be more efficient
@@ -331,7 +331,7 @@ unless overloaded.empty?
 end
 
 puts "<p><span style=\"color: red; font-weight: bold;\">No response</span>: #{down.map { |name| name.to_aref }.listify}.</p>" unless down.empty?
-puts "<font color='red'>Claimed</font>: " + claims.map { |m, rs| "#{m.to_aref} (" + rs.map { |u, t| u }.listify + ")" }.listify unless claims.empty?
+puts "<p><font color='red'>Claimed</font>: " + claims.map { |m, rs| "#{m.to_aref} (" + rs.map { |u, t| u }.listify + ")" }.listify + "</p>"  unless claims.empty?
 
 ## cdm jun 2007: add fileserver name, now we have two (thanks to William for code help!)
 ## todo: Look for stat 'D' -- device wait processes for other clues to who's causing NFS load
@@ -350,19 +350,11 @@ if ! culprits.empty?
   end
 end
 
-puts "<p><b>Fileserver load:</b> #{fsload}"
-if ! culprits.empty?
-  puts " [<a href=\"#culprits\">Culprits</a>]"
-end
-puts "</p>"
-
-puts "<p><b>Special machines</b> <i>(not for heavy compute!):</i> #{"jamie".to_aref} &amp; #{"jacob".to_aref} <i>(remote access);</i> #{"nlp".to_aref} <i>(webserver, tomcat);</i> #{"jerome".to_aref} <i>(Jenkins CI);</i> #{"jack".to_aref} <i>(mysql);</i> #{"jay".to_aref} <i>(tape backup).</i></p>"
-
 puts "<p><b>Impressive:</b> " + impressive.map { |u| "#{u} #{lusers[u].nil? ? "": lusers[u][:note].nil? ? "" : "<i>[#{lusers[u][:note]}]</i>"}#{lusers[u].nil? ? "": " (#{'%.1f' % lusers[u][:total_cpu]}% cpu)" }" }.listify + ".</p>" unless impressive.empty?
 
-puts "<p><b>GPUs used:</b> " + gpu_user_counts.sort_by {|k, v| -v}.map {|u, n| "#{u} #{lusers[u].nil? ? "": lusers[u][:header_note].nil? ? "" : "<i>[#{lusers[u][:header_note]}]</i>"}: #{n}"}.listify + ".</p>"
+puts "<p><b>GPUs used:</b> " + gpu_user_counts.sort_by {|k, v| -v}.map {|u, n| "#{u}#{lusers[u].nil? ? "": lusers[u][:header_note].nil? ? "" : "<i> [#{lusers[u][:header_note]}]</i>"}: #{n}"}.listify + ".</p>"
 
-puts "<p><b>Free-ish GPUs</b> (mem, util &lt;= 10%, " + free_gpus.length.to_s + " in total, " + free_gpus_claimed.to_s + " claimed): " + free_gpus.listify + ".</p>"
+puts "<p><b>Free-ish GPUs</b> (mem, util &le; 10%, " + free_gpus.length.to_s + " in total, " + free_gpus_claimed.to_s + " claimed): " + free_gpus.listify + ".</p>"
 
 # CDM Nov 2008: This script runs on juice as users pdm. This bit needs juicy mounted
 # if ! impressive.empty?
@@ -371,10 +363,18 @@ puts "<p><b>Free-ish GPUs</b> (mem, util &lt;= 10%, " + free_gpus.length.to_s + 
 #   puts "<p>The hadoopers are: #{people}</p>"
 # end
 
+puts "<p><b>Fileserver load:</b> #{fsload}"
+if ! culprits.empty?
+  puts " [<a href=\"#culprits\">Culprits</a>]"
+end
+puts "</p>"
+
+puts "<p><b>Special machines</b> <i>(not for heavy compute!):</i> #{"jamie".to_aref} &amp; #{"jacob".to_aref} <i>(remote access);</i> #{"nlp".to_aref} <i>(webserver, tomcat);</i> #{"jerome".to_aref} <i>(Jenkins CI);</i> #{"jack".to_aref} <i>(mysql);</i> #{"jay".to_aref} <i>(tape backup).</i></p>"
+
 puts "<p><b>Documentation:</b> <a href=\"machine-info.shtml\">NLP computer help &amp; rules</a> &middot; <a href=\"machine-info.shtml\#machinespage\">machines page</a>.</p>"
 # <a href=\"https://cs.stanford.edu/wiki/nlp-cluster/\">PBS (jude* machines)</a> &middot;
 
-puts "<p><b>For info on CodaLab users go</b> <a href=\"https://codalab.stanford.edu/worksheets/0x8ea918daaabc4a4e92c080a91da6552d/\">here</a></p>"
+puts "<p><b>For info on CodaLab users go</b> <a href=\"https://codalab.stanford.edu/worksheets/0x8ea918daaabc4a4e92c080a91da6552d/\">here</a>.</p>"
 
 if !codalab_to_user[:success]
   puts "<p><b style=\"color: red;\">Warning: CodaLab scraping code failed! Please contact Ice.</b></p>"
