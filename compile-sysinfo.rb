@@ -11,6 +11,7 @@ YAML_DIR = "/u/nlp/machine-info"
 ## for user "claims" and notes
 USER_DIR = "/scr"
 NOTE_FN = ".javanlp-note"
+HEADER_NOTE_FN = ".javanlp-header-note"
 CLAIM_FN = ".nlp-machine-claims"
 SYSTEM_DIR = "/u/nlp/machine-info"
 CLAIM_TOO_FN = "claims.txt"
@@ -18,7 +19,7 @@ NOTE_MAX_AGE = 5 * 24 * 3600 # (seconds) ignore files older than this
 
 ## known lusers. even if these guys aren't running anything we will
 ## poll their claims.  this list needs updated when new people come.
-LUSERS = %w(jrfinkel grenager wtm manning jurafsky natec mgalley cerd mcdm acvogel
+LUSERS = %w(dorarad jrfinkel grenager wtm manning jurafsky natec mgalley cerd mcdm acvogel
 	    hyhieu meric pengqi sbowman cases lmthang bdlijiwei vzhong codalab wmonroe4 jebolton kevclark danqi)
 
 ## total cpu percentage usage threshold for whether a luser is
@@ -34,7 +35,14 @@ raise "expecting a sequence of machine names as arguments" if ARGV.empty?
 ## get machine info
 machines = ARGV.flat_map { |names| names.split.map { |name|
     SysInfo.new name, YAML.load_file(File.join(YAML_DIR, "#{name}.yaml"))
-}}.sort_by { |m| m.name }
+}}.sort_by do |m|
+  if match = m.name.match(/^([A-Za-z]+)([0-9]+)$/)
+    one, two = match.captures
+    one + two.to_i.to_s.rjust(4, "0")
+  else
+    m.name
+  end
+end
 
 ## get user notes and claims
 lusers = {}
@@ -51,10 +59,14 @@ begin
     (lusers.keys + LUSERS).uniq.each do |u|
       lusers[u] ||= {}
       note_fn = File.join USER_DIR, u, NOTE_FN
+      header_note_fn = File.join USER_DIR, u, HEADER_NOTE_FN
       claim_fn = File.join USER_DIR, u, CLAIM_FN
       if File.exists?(note_fn) && (Time.now - File.mtime(note_fn)) < NOTE_MAX_AGE
         lusers[u][:note] = File.readlines(note_fn).join("<br>").chomp rescue "(can't read #{note_fn})"
       end
+      if File.exists?(header_note_fn) && (Time.now - File.mtime(header_note_fn)) < NOTE_MAX_AGE
+        lusers[u][:header_note] = File.readlines(header_note_fn).join("<br>").chomp rescue "(can't read #{header_note_fn})"
+      end      
       if File.exists?(claim_fn) && (Time.now - File.mtime(claim_fn)) < NOTE_MAX_AGE
         lusers[u][:claims] = Hash[*File.readlines(claim_fn).map { |l| l =~ /^(\S+): (.*)$/ && [$1, $2] }.flatten.compact] rescue {"unknown machine (can't read #{claim_fn})" => ""}
       end

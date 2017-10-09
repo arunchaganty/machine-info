@@ -36,7 +36,7 @@ EOS
   def statustab_html gpu_claim_list, gpu_to_user_list
     ret = <<EOS
 <table cellpadding="2" cellspacing="0" bgcolor="#cccccc">
-<tr><td align="left" bgcolor="#941414"><font color='white'><b>machine info</b></font></td></tr>
+<tr><th align="left" bgcolor="#941414" colspan="2"><font color='white'><b>machine info</b></font></th></tr>
 <tr><td align="right">load:</td> <td align="left">#{load1} #{load5} #{load15}</td>
     #{load5.to_bar 8.0, PROGRESS_CELLS, '#5D8896'}</tr>
 <tr><td align="right">memory:</td> <td align="left">#{memfree}mb (#{memfree.to_pct memtot}) free</td>
@@ -61,37 +61,26 @@ def gpu_usage_tab gpu_claim_list, gpu_to_user_list
 
       gpu_strs = gpus.each_with_index.map { |gpu, i|
         <<EOS
-          <tr>
-            <td align="left">gpu#{i}: #{gpu[:name]} #{gpu[:perf]}</td>
-            <td align="right">util:</td> <td align="left">#{gpu[:utilization]}%</td>
-              #{gpu[:utilization].to_i.to_bar 100, PROGRESS_CELLS, '#5D8896'}
-            <td align="right">mem:</td> <td align="left">#{gpu[:memused]} MiB (#{gpu[:memused].to_i.to_pct gpu[:memtot]}) used</td>
-              #{gpu[:memused].to_i.to_bar gpu[:memtot], PROGRESS_CELLS, '#A3CEDC'}
-            <td align="right">users:</td> <td align="left">#{gpu_to_user_list[i]}</td>
-            <td align="right">&nbsp&nbsp&nbspclaim:</td> <td align="left">#{gpu_claim_list[i]}</td>
-          </tr>
+<tr>
+<td align="left">gpu#{i}: #{gpu[:name]}</td>
+<td align="right">&nbsp;&nbsp;&nbsp;util:</td> <td align="left">#{gpu[:utilization]}%</td>
+#{gpu[:utilization].to_i.to_bar 100, PROGRESS_CELLS, '#5D8896'}
+<td align="right">&nbsp;&nbsp;&nbsp;mem:</td> <td align="left">#{gpu[:memused]} MiB (#{gpu[:memused].to_i.to_pct gpu[:memtot]}) used</td>
+#{gpu[:memused].to_i.to_bar gpu[:memtot], PROGRESS_CELLS, '#A3CEDC'}
+<td align="right">&nbsp;&nbsp;&nbsp;users:</td> <td align="left">#{gpu_to_user_list[i]}</td>
+<td align="right">&nbsp;&nbsp;&nbsp;claim:</td> <td align="left">#{gpu_claim_list[i]}</td>
+</tr>
 EOS
-#<<EOS
-#<tr><td align="left" bgcolor="#941414"><font color='white'><b>gpu#{i} info</b></font></td></tr>
-#<tr><td align="right">gpu#{i} util:</td> <td align="left">#{gpu[:utilization]}%</td>
-#    #{gpu[:utilization].to_bar 100, PROGRESS_CELLS, '#5D8896'}</tr>
-#<tr><td align="right">gpu#{i} mem:</td> <td align="left">#{gpu[:memused]} MiB (#{gpu[:memused].to_pct gpu[:memtot]}) used</td>
-#    #{gpu[:memused].to_bar gpu[:memtot], PROGRESS_CELLS, '#A3CEDC'}</tr>
-#<tr><td align="right">gpu#{i} users:</td> <td align="left">#{gpu_to_user_list[i]}</td></tr>
-#<tr><td align="right">gpu#{i} claim:</td> <td align="left">#{gpu_claim_list[i]}</td></tr>
-#EOS
       }
-      
-      ret = 
+
+      ret =
         <<EOS
-        <tr>
-          <td colspan="2" bgcolor="#f6eeee">
-            <table>
-              <tr>
-                <th>
-                  <td align="left" bgcolor="#941414"><font color='white'><b>GPU info</b></font></td>
-                </th>
-              </tr>
+<tr>
+<td colspan="2" bgcolor="#f6eeee">
+<table>
+<tr>
+<th align="left" bgcolor="#941414" colspan="2"><font color='white'><b>GPU info</b></font></th>
+</tr>
 EOS
       ret += gpu_strs.join "\n"
       ret += "</table>"
@@ -130,7 +119,7 @@ EOS
     body = nontrivial_lusers.sort_by { |name, h| h[:cpu] }.map do |name, h|
       #cmd = h[:cmd].select { |what, cpu, mem| cpu > SysInfo::TRIVIAL_CPU_THRESH || mem > SysInfo::TRIVIAL_MEM_THRESH }.map { |what, cpu, mem| what }
       # skip PBS MOM jobs
-      selected = h[:cmd].select { |what, cpu, mem, extra| (cpu > 0 || mem > 0) and not
+      selected = h[:cmd].select { |what, cpu, mem, extra| (cpu > SysInfo::TRIVIAL_CPU_THRESH || mem > 0) and not
         (extra[:full_cmd] =~ /pbs_mom/ or extra[:full_cmd] =~ /mom_priv/ or what =~ /pbs_mom/ or what =~ /mom_priv/) }
 
       # TODO this could be more efficient
@@ -256,6 +245,35 @@ h = YAML.load STDIN.read
 
 impressive, down, busy, overloaded, free, freeish, claims, gpu_claims, lusers, servers, info, gpu_to_user, codalab_to_user = h[:impressive], h[:down], h[:busy], h[:overloaded], h[:free], h[:freeish], h[:claims], h[:gpu_claims], h[:lusers], h[:servers], h[:info], h[:gpu_to_user], (h[:codalab_to_user] || {})
 
+gpu_users_flat = []
+for user_str in gpu_to_user.values().flatten()
+    if not user_str.is_a?(String)
+        next
+    end
+    for user in user_str.split(",")
+        gpu_users_flat.push user
+    end
+end
+gpu_user_counts = gpu_users_flat.each_with_object(Hash.new(0)) do |name, h|
+    h[name] += 1
+end
+
+# generate a list of free-ish gpus (mem <= 10% and util <= 10%)
+free_gpus = []
+free_gpus_claimed = 0
+info.each do |name, m|
+    if m.gpus.length > 0
+        m.gpus.each_with_index do |gpu, i|
+            if (gpu[:memused].to_f <= gpu[:memtot].to_f / 10) and (gpu[:utilization].to_f <= 10)
+                free_gpus.push "#{name.to_aref.wrap_if('del', claims.member?(name))}:gpu#{i}"
+                if claims.member?(name)
+                    free_gpus_claimed += 1
+                end
+            end
+        end
+    end
+end
+
 puts <<EOS
 <!--#include virtual="/header.html" -->
 
@@ -313,7 +331,7 @@ unless overloaded.empty?
 end
 
 puts "<p><span style=\"color: red; font-weight: bold;\">No response</span>: #{down.map { |name| name.to_aref }.listify}.</p>" unless down.empty?
-puts "<font color='red'>Claimed</font>: " + claims.map { |m, rs| "#{m.to_aref} (" + rs.map { |u, t| u }.listify + ")" }.listify unless claims.empty?
+puts "<p><font color='red'>Claimed</font>: " + claims.map { |m, rs| "#{m.to_aref} (" + rs.map { |u, t| u }.listify + ")" }.listify + "</p>"  unless claims.empty?
 
 ## cdm jun 2007: add fileserver name, now we have two (thanks to William for code help!)
 ## todo: Look for stat 'D' -- device wait processes for other clues to who's causing NFS load
@@ -332,15 +350,11 @@ if ! culprits.empty?
   end
 end
 
-puts "<p><b>Fileserver load:</b> #{fsload}"
-if ! culprits.empty?
-  puts " [<a href=\"#culprits\">Culprits</a>]"
-end
-puts "</p>"
-
-puts "<p><b>Special machines</b> <i>(not for heavy compute!):</i> #{"jamie".to_aref} &amp; #{"jacob".to_aref} <i>(remote access);</i> #{"nlp".to_aref} <i>(webserver, tomcat);</i> #{"jerome".to_aref} <i>(Jenkins CI);</i> #{"jack".to_aref} <i>(mysql);</i> #{"jay".to_aref} <i>(tape backup).</i></p>"
-
 puts "<p><b>Impressive:</b> " + impressive.map { |u| "#{u} #{lusers[u].nil? ? "": lusers[u][:note].nil? ? "" : "<i>[#{lusers[u][:note]}]</i>"}#{lusers[u].nil? ? "": " (#{'%.1f' % lusers[u][:total_cpu]}% cpu)" }" }.listify + ".</p>" unless impressive.empty?
+
+puts "<p><b>GPUs used:</b> " + gpu_user_counts.sort_by {|k, v| -v}.map {|u, n| "#{u}#{lusers[u].nil? ? "": lusers[u][:header_note].nil? ? "" : "<i> [#{lusers[u][:header_note]}]</i>"}: #{n}"}.listify + ".</p>"
+
+puts "<p><b>Free-ish GPUs</b> (mem, util &le; 10%, " + free_gpus.length.to_s + " in total, " + free_gpus_claimed.to_s + " claimed): " + free_gpus.listify + ".</p>"
 
 # CDM Nov 2008: This script runs on juice as users pdm. This bit needs juicy mounted
 # if ! impressive.empty?
@@ -349,13 +363,21 @@ puts "<p><b>Impressive:</b> " + impressive.map { |u| "#{u} #{lusers[u].nil? ? ""
 #   puts "<p>The hadoopers are: #{people}</p>"
 # end
 
+puts "<p><b>Fileserver load:</b> #{fsload}"
+if ! culprits.empty?
+  puts " [<a href=\"#culprits\">Culprits</a>]"
+end
+puts "</p>"
+
+puts "<p><b>Special machines</b> <i>(not for heavy compute!):</i> #{"jamie".to_aref} &amp; #{"jacob".to_aref} <i>(remote access);</i> #{"nlp".to_aref} <i>(webserver, tomcat);</i> #{"jerome".to_aref} <i>(Jenkins CI);</i> #{"jack".to_aref} <i>(mysql);</i> #{"jay".to_aref} <i>(tape backup).</i></p>"
+
 puts "<p><b>Documentation:</b> <a href=\"machine-info.shtml\">NLP computer help &amp; rules</a> &middot; <a href=\"machine-info.shtml\#machinespage\">machines page</a>.</p>"
 # <a href=\"https://cs.stanford.edu/wiki/nlp-cluster/\">PBS (jude* machines)</a> &middot;
 
-puts "<p><b>For info on CodaLab users go</b> <a href=\"https://codalab.stanford.edu/worksheets/0x8ea918daaabc4a4e92c080a91da6552d/\">here</a></p>"
+puts "<p><b>For info on CodaLab users go</b> <a href=\"https://codalab.stanford.edu/worksheets/0x8ea918daaabc4a4e92c080a91da6552d/\">here</a>.</p>"
 
 if !codalab_to_user[:success]
-  #puts "<p><b style=\"color: red;\">Warning: CodaLab scraping code failed! Please contact Ice.</b></p>"
+  puts "<p><b style=\"color: red;\">Warning: CodaLab scraping code failed! Please contact Ice.</b></p>"
 end
 
 puts "<h2>Machines</h2>"
@@ -422,7 +444,7 @@ EOS
     puts '<b>CodaLab users:</b>'
     puts '<ul>'
     codalab_to_user[name].each do |user, uuids|
-      uuids.map! { |x| "<a target=_blank href=https://codalab.stanford.edu/bundles/#{x[0]}/>#{x[0][0,8]}</a> (#{x[1].gsub('failed', 'zombie')})" }
+      uuids.map! { |x| "<a target=_blank href=https://codalab.stanford.edu/bundles/#{x[0]}/>#{x[0][0,8]}</a> (#{x[1]})" }
       puts "<li><b>#{user}</b>: #{uuids.join(', ')}</li>"
     end
     puts '</ul>'

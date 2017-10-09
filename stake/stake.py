@@ -21,6 +21,9 @@ Usage:
 @author Percy Liang
 '''
 from __future__ import print_function
+from builtins import str
+from builtins import map
+from builtins import range
 
 import argparse
 import json
@@ -102,7 +105,7 @@ def get_gpu_info():
         assert s.endswith('MiB')
         return int(s[:-3]) * 1024 * 1024
 
-    lines = subprocess.check_output('nvidia-smi', universal_newlines=True).split('\n')
+    lines = subprocess.check_output('nvidia-smi', universal_newlines=True).decode('utf-8').split('\n')
     curr_gpu_num = None
     in_processes_section = False
     info = {}
@@ -163,7 +166,7 @@ def read_stake_info():
 
 def write_stake_info(stake_info):
     with open(stake_path, 'w') as f:
-        print(json.dumps(stake_info),file=f)
+        print(json.dumps(stake_info), file=f)
 
 def claim_exists(claim):
     pid = claim.get('pid')
@@ -305,7 +308,7 @@ def run_command(claim_id, stake_info):
         }
         if args.stats_file:
             with open(args.stats_file, 'w') as f:
-                print(json.dumps(stats),file=f)
+                print(json.dumps(stats), file=f)
 
     #while p.returncode is None:
     first = True
